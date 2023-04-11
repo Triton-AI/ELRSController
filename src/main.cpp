@@ -19,8 +19,8 @@ void safetyInterrupt(void){
 void setup() {
   pinMode(8, OUTPUT);
 
-  Timer1.initialize(150000);
-  Timer1.attachInterrupt(safetyInterrupt); // check for connection every 0.15 seconds
+  Timer1.initialize(100000);
+  Timer1.attachInterrupt(safetyInterrupt); // check for connection every 0.1 seconds
   noConnection = true;
   //Set pinout
   sBus.begin();
