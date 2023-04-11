@@ -8,7 +8,10 @@ void FUTABA_SBUS::begin(){
 	int16_t loc_servos[18]    = {
   			1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,0,0};
   	port.begin(BAUDRATE);
-
+  pinMode(r_pin, INPUT);
+  pinMode(t_pin, OUTPUT);
+  mySerial = new SoftwareSerial(r_pin, t_pin);
+  mySerial->begin(BAUDRATE);
 	memcpy(sbusData,loc_sbusData,25);
 	memcpy(channels,loc_channels,18);
 	memcpy(servos,loc_servos,18);
@@ -129,16 +132,7 @@ void FUTABA_SBUS::UpdateServos(void) {
   }
 }
 void FUTABA_SBUS::UpdateChannels(void) {
-  uint8_t i;
-  //uint8_t sbus_pointer = 0;
-  // clear channels[]
-/*
-Serial << "sbusData ";
 
-    for (i=1; i<23; i++) {
-      Serial << sbusData[i] << " ";
-    }
-Serial << "\r\n";*/
   channels[0]  = ((sbusData[1]|sbusData[2]<< 8) & 0x07FF);
   channels[1]  = ((sbusData[2]>>3|sbusData[3]<<5) & 0x07FF);
   channels[2]  = ((sbusData[3]>>6|sbusData[4]<<2|sbusData[5]<<10) & 0x07FF);
@@ -158,55 +152,20 @@ Serial << "\r\n";*/
     channels[15] = ((sbusData[21]>>5|sbusData[22]<<3) & 0x07FF);
   #endif
 
-  // Failsafe
-  failsafe_status = SBUS_SIGNAL_OK;
-  if (sbusData[23] & (1<<2)) {
-    failsafe_status = SBUS_SIGNAL_LOST;
-  }
-  if (sbusData[23] & (1<<3)) {
-    failsafe_status = SBUS_SIGNAL_FAILSAFE;
-  }
-
 }
 void FUTABA_SBUS::FeedLine(void){
   //uint16_t other_test; 
   if (port.available() > 24){
-port.read();
-port.read();
-    while(port.available() > 0){
-      inData = port.read();
-       
-      switch (feedState){
-      case 0:
-        if (inData != 0x16){
 
-          port.flush();
-          return;
-        }
-        else{
-          bufferIndex = 0;
-          inBuffer[bufferIndex] = inData;
-          inBuffer[23] = 0xff;
-          feedState = 1;
-        }
-        break;
-      case 1:
-        bufferIndex ++;
-        inBuffer[bufferIndex] = inData;
-        if (bufferIndex < 23 && port.available() == 0){
-          feedState = 0;
-        }
-        if (bufferIndex == 23){
-          feedState = 0;
-          if (inBuffer[0]==0x16 && inBuffer[23] != 0){
-            memcpy(sbusData,inBuffer,24);
-	          port.flush();
-            toChannels = 1;
-          }
-        }
-        break;
-      }
-    }
+    port.readBytes(inBuffer,256);
+    mySerial->write(inBuffer,256);
+    int sm;
+    for(sm = 0; !(inBuffer[sm] == 0xc8 && inBuffer[sm+1] == 0x18
+    && inBuffer[sm+2] == 0x16) && sm < 40; sm++);
+    if(sm >= 40) return;
+    
+    toChannels = 1;
+    port.flush();
+    memcpy(sbusData,inBuffer+sm+2,24); 
   }
 }
-

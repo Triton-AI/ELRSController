@@ -1,16 +1,18 @@
-
 #ifndef FUTABA_SBUS_h
 #define FUTABA_SBUS_h
 
 #include <Arduino.h>
-
+#include <SoftwareSerial.h>
 
 #define SBUS_SIGNAL_OK          0x00
 #define SBUS_SIGNAL_LOST        0x01
 #define SBUS_SIGNAL_FAILSAFE    0x03
 #define BAUDRATE 115200
 #define port Serial1
-#define ALL_CHANNELS 1
+#define ALL_CHANNELS 0
+
+#define r_pin 9
+#define t_pin 10
 
 
 class FUTABA_SBUS
@@ -19,6 +21,7 @@ class FUTABA_SBUS
 		uint8_t sbusData[25];
 		int16_t channels[18];
 		int16_t servos[18];
+		uint8_t toSendArray[256];
 		uint8_t  failsafe_status;
 		int sbus_passthrough;
 		int toChannels;
@@ -39,10 +42,11 @@ class FUTABA_SBUS
 		uint8_t ch;
 		uint8_t bit_in_channel;
 		uint8_t bit_in_servo;
-		uint8_t inBuffer[25];
+		uint8_t inBuffer[256];
 		int bufferIndex;
 		uint8_t inData;
 		int feedState;
+		SoftwareSerial* mySerial;
 
 };
 
