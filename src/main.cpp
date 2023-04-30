@@ -6,18 +6,24 @@
 FUTABA_SBUS sBus;
 volatile bool noConnection = 0;
 
+void write_to_pins(uint8_t val){
+  digitalWrite(5, val);
+  digitalWrite(7, val);
+  //digitalWrite(8, val);
+}
+
 void safetyInterrupt(void){
   if(noConnection){
-    digitalWrite(8, HIGH);
+    write_to_pins(HIGH);
   }
   else{
-    digitalWrite(8, LOW);
+    write_to_pins(LOW);
   }
   noConnection = true;
 }
 
 void setup() {
-  pinMode(8, OUTPUT);
+  write_to_pins(OUTPUT);
 
   Timer1.initialize(100000);
   Timer1.attachInterrupt(safetyInterrupt); // check for connection every 0.1 seconds
@@ -32,12 +38,12 @@ void loop() {
     sBus.UpdateChannels();
     sBus.toChannels = 0; 
     if (sBus.channels[4] > 500 || sBus.channels[7] > 500){
-      digitalWrite(8, HIGH);
+      write_to_pins(HIGH);
       noConnection = true;
 
     }
     else{
-      digitalWrite(8, LOW);
+      write_to_pins(LOW);
       noConnection = false;
 
     }
