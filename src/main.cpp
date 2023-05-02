@@ -20,10 +20,10 @@ void setAllPinModes(uint8_t val){
 
 void safetyInterrupt(void){
   if(noConnection){
-    writeToAllPins(HIGH);
+    writeToAllPins(LOW);
   }
   else{
-    writeToAllPins(LOW);
+    writeToAllPins(HIGH);
   }
   noConnection = true;
 }
@@ -45,11 +45,11 @@ void loop() {
     sBus.toChannels = 0; 
 
     if (sBus.channels[4] > 500 || sBus.channels[7] > 500){
-      writeToAllPins(HIGH);
+      writeToAllPins(LOW);
       noConnection = true;
     }
     else{
-      writeToAllPins(LOW);
+      writeToAllPins(HIGH);
       noConnection = false;
     }
   }
