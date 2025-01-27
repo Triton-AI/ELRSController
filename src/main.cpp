@@ -76,6 +76,33 @@ int get_button_state(int estimated) {
   }
 }
 
+// #define FILTER_WINDOW_SIZE 5
+
+// // Function to apply a moving average filter
+// long moving_average(long* buffer, int buffer_size, long new_value) {
+//   static int index = 0;
+//   static long sum = 0;
+//   static int count = 0;
+
+//   // Subtract the old value and add the new value
+//   sum -= buffer[index];
+//   buffer[index] = new_value;
+//   sum += new_value;
+
+//   // Move to the next position in the buffer
+//   index = (index + 1) % buffer_size;
+
+//   // Increment the count until the buffer is filled
+//   if (count < buffer_size) count++;
+
+//   // Return the average
+//   return sum / count;
+// }
+
+// // Buffers for the moving average filter
+// long l_est_buffer[FILTER_WINDOW_SIZE] = {0};
+// long r_est_buffer[FILTER_WINDOW_SIZE] = {0};
+
 void loop() {
   sBus.FeedLine();
   if (sBus.toChannels == 1){
@@ -91,7 +118,11 @@ void loop() {
     Joystick.setThrottle(lTriSwitchTracker.get_estimated());
     Joystick.setRudder(rTriSwitchTracker.get_estimated());
 
+    // Apply the moving average filter
     long l_est = lTriSwitchTracker.get_estimated();
+    long r_est = rTriSwitchTracker.get_estimated();
+    // long l_est = moving_average(l_est_buffer, FILTER_WINDOW_SIZE, lTriSwitchTracker.get_estimated());
+    // long r_est = moving_average(r_est_buffer, FILTER_WINDOW_SIZE, rTriSwitchTracker.get_estimated());
     if (abs(l_est - ACTIVE_SIGNAL) <= ACTIVE_ERROR_THRESHOLD)
     {
       Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
@@ -105,7 +136,6 @@ void loop() {
       Joystick.setButton(2,get_button_state(lButTracker.get_estimated()));
     }
 
-    long r_est = rTriSwitchTracker.get_estimated();
     if (abs(r_est - ACTIVE_SIGNAL) <= ACTIVE_ERROR_THRESHOLD)
     {
       Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
