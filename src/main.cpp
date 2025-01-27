@@ -10,8 +10,6 @@
 #define ACTIVE_SIGNAL 1792
 #define REALESED_SIGNAL 192
 #define MAJORITY_THREASH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
-#define ACTIVE_ERROR_THRESHOLD 600
-#define REALESED_ERROR_THRESHOLD 400
 
 #define XAXIS_CHANNEL 3
 #define YAXIS_CHANNEL 2
@@ -21,6 +19,68 @@
 #define R_TRI_SWITCH 6
 #define LBUTTON_CHANNEL 4
 #define RBUTTON_CHANNEL 7
+
+enum TriSwitchMode
+{
+    DOWN = 0,
+    MID = 1,
+    UP = 2,
+};
+
+struct Translation
+{
+    double normalize(int analogValue);
+    TriSwitchMode getTriSwitchMode(int TriVal);
+};
+
+// TRANSLATION
+double Translation::normalize(int analogValue) 
+{
+    if (analogValue > 1800)
+        analogValue = 1800;
+    if (analogValue < 174)
+        analogValue = 174;
+    analogValue -= 992;
+    return analogValue >= 0 ? (double(analogValue) / (1800 - 992))
+                            : (double(analogValue) / (992 - 174));
+}
+TriSwitchMode Translation::getTriSwitchMode(int TriVal)
+{
+    double TriVal_norm = normalize(TriVal);
+    if (TriVal_norm < -0.5)
+        return DOWN;
+    else if (TriVal_norm > 0.4)
+        return UP;
+    else
+        return MID;
+}
+
+#define FILTER_WINDOW_SIZE 10
+
+// Buffers for the moving average filter (separate buffers for left and right)
+long l_est_buffer[FILTER_WINDOW_SIZE] = {0};
+long r_est_buffer[FILTER_WINDOW_SIZE] = {0};
+
+int l_est_index = 0;  // Track current index for left filter
+int r_est_index = 0;  // Track current index for right filter
+
+long moving_average(long* buffer, int& buffer_index, int buffer_size, long new_value) {
+  long sum = 0;
+
+  // Subtract the old value and add the new value
+  buffer[buffer_index] = new_value;
+  buffer_index = (buffer_index + 1) % buffer_size;
+
+  // Sum up all values in the buffer
+  for (int i = 0; i < buffer_size; i++) {
+    sum += buffer[i];
+  }
+
+  // Return the average
+  return sum / buffer_size;
+}
+
+Translation Map;
 
 Joystick_ Joystick(JOYSTICK_DEFAULT_REPORT_ID,JOYSTICK_TYPE_MULTI_AXIS,
   6, 0,                  // Button Count, Hat Switch Count
@@ -76,32 +136,6 @@ int get_button_state(int estimated) {
   }
 }
 
-// #define FILTER_WINDOW_SIZE 5
-
-// // Function to apply a moving average filter
-// long moving_average(long* buffer, int buffer_size, long new_value) {
-//   static int index = 0;
-//   static long sum = 0;
-//   static int count = 0;
-
-//   // Subtract the old value and add the new value
-//   sum -= buffer[index];
-//   buffer[index] = new_value;
-//   sum += new_value;
-
-//   // Move to the next position in the buffer
-//   index = (index + 1) % buffer_size;
-
-//   // Increment the count until the buffer is filled
-//   if (count < buffer_size) count++;
-
-//   // Return the average
-//   return sum / count;
-// }
-
-// // Buffers for the moving average filter
-// long l_est_buffer[FILTER_WINDOW_SIZE] = {0};
-// long r_est_buffer[FILTER_WINDOW_SIZE] = {0};
 
 void loop() {
   sBus.FeedLine();
@@ -119,41 +153,46 @@ void loop() {
     Joystick.setRudder(rTriSwitchTracker.get_estimated());
 
     // Apply the moving average filter
-    long l_est = lTriSwitchTracker.get_estimated();
-    long r_est = rTriSwitchTracker.get_estimated();
-    // long l_est = moving_average(l_est_buffer, FILTER_WINDOW_SIZE, lTriSwitchTracker.get_estimated());
-    // long r_est = moving_average(r_est_buffer, FILTER_WINDOW_SIZE, rTriSwitchTracker.get_estimated());
-    if (abs(l_est - ACTIVE_SIGNAL) <= ACTIVE_ERROR_THRESHOLD)
+    // long l_est = lTriSwitchTracker.get_estimated();
+    // long r_est = rTriSwitchTracker.get_estimated();
+    long l_est = moving_average(l_est_buffer, l_est_index, FILTER_WINDOW_SIZE, lTriSwitchTracker.get_estimated());
+    long r_est = moving_average(r_est_buffer, r_est_index, FILTER_WINDOW_SIZE, rTriSwitchTracker.get_estimated());
+    
+    switch (Map.getTriSwitchMode(l_est))
     {
-      Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
-    }
-    else if (abs(l_est - REALESED_SIGNAL) <= REALESED_ERROR_THRESHOLD)
-    {
-      Joystick.setButton(4,get_button_state(lButTracker.get_estimated()));
-    }
-    else
-    {
-      Joystick.setButton(2,get_button_state(lButTracker.get_estimated()));
+      case TriSwitchMode::UP:
+          Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
+          break;
+      case TriSwitchMode::MID:
+          Joystick.setButton(2,get_button_state(lButTracker.get_estimated()));
+          break;
+      case TriSwitchMode::DOWN:
+          Joystick.setButton(4,get_button_state(lButTracker.get_estimated()));
+          break;
     }
 
-    if (abs(r_est - ACTIVE_SIGNAL) <= ACTIVE_ERROR_THRESHOLD)
+    switch (Map.getTriSwitchMode(r_est))
     {
-      Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
-    }
-    else if (abs(r_est - REALESED_SIGNAL) <= REALESED_ERROR_THRESHOLD)
-    {
-      Joystick.setButton(5,get_button_state(rButTracker.get_estimated()));
-    }
-    else
-    {
-      Joystick.setButton(3,get_button_state(rButTracker.get_estimated()));
+      case TriSwitchMode::UP:
+          Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
+          break;
+      case TriSwitchMode::MID:
+          Joystick.setButton(3,get_button_state(rButTracker.get_estimated()));
+          break;
+      case TriSwitchMode::DOWN:
+          Joystick.setButton(5,get_button_state(rButTracker.get_estimated()));
+          break;
     }
 
     // Print the estimated values for debugging
-    Serial.print("L Tri Switch Error: ");
-    Serial.print(abs(l_est - REALESED_SIGNAL));
-    Serial.print(" | R Tri Switch Error: ");
-    Serial.println(abs(r_est - REALESED_SIGNAL));
+    Serial.print("L Tri Switch Mode: ");
+    Serial.print(Map.getTriSwitchMode(l_est));
+    Serial.print(", ");
+    Serial.print(l_est);
+    Serial.print(" | R Tri Switch Mode: \n");
+    Serial.print(Map.getTriSwitchMode(r_est));
+    Serial.print(", ");
+    Serial.println(r_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THREASH || 
         rButTracker.get_estimated() > MAJORITY_THREASH)
