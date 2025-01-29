@@ -19,6 +19,7 @@
 #define R_TRI_SWITCH_CHANNEL 6
 #define LBUTTON_CHANNEL 4
 #define RBUTTON_CHANNEL 7
+#define SE_BUTTON_CHANNEL 8
 
 enum TriSwitchMode
 {
@@ -60,9 +61,11 @@ TriSwitchMode Translation::getTriSwitchMode(int TriVal)
 // Buffers for the moving average filter (separate buffers for left and right)
 long l_est_buffer[FILTER_WINDOW_SIZE] = {0};
 long r_est_buffer[FILTER_WINDOW_SIZE] = {0};
+long se_est_buffer[30] = {0};
 
 int l_est_index = 0;  // Track current index for left filter
 int r_est_index = 0;  // Track current index for right filter
+int se_est_index = 0;
 
 long moving_average(long* buffer, int& buffer_index, int buffer_size, long new_value) {
   long sum = 0;
@@ -83,7 +86,7 @@ long moving_average(long* buffer, int& buffer_index, int buffer_size, long new_v
 Translation Map;
 
 Joystick_ Joystick(JOYSTICK_DEFAULT_REPORT_ID,JOYSTICK_TYPE_MULTI_AXIS,
-  6, 0,                  // Button Count, Hat Switch Count
+  11, 0,                  // Button Count, Hat Switch Count
   true, true, false,     // X and Y, but no Z Axis
   true, true, false,   // No Rx, Ry, or Rz
   true, true,          // No rudder or throttle
@@ -99,6 +102,7 @@ SBusTracker lTriSwitchTracker;
 SBusTracker rTriSwitchTracker;
 SBusTracker lButTracker;
 SBusTracker rButTracker;
+SBusTracker SEButTracker;
 
 void setup() {
 
@@ -126,13 +130,16 @@ void update_trackers(FUTABA_SBUS & sBus) {
   rTriSwitchTracker.add(sBus.channels[R_TRI_SWITCH_CHANNEL]);
   lButTracker.add(sBus.channels[LBUTTON_CHANNEL]);
   rButTracker.add(sBus.channels[RBUTTON_CHANNEL]);
+  SEButTracker.add(sBus.channels[SE_BUTTON_CHANNEL]);
 }
 
 int get_button_state(int estimated) {
   if (estimated > MAJORITY_THREASH) {
-    return ACTIVE_SIGNAL;
-  } else {
+    // return ACTIVE_SIGNAL;
     return REALESED_SIGNAL;
+  } else {
+    // return REALESED_SIGNAL;
+    return ACTIVE_SIGNAL;
   }
 }
 
@@ -151,48 +158,65 @@ void loop() {
     Joystick.setRyAxis(ryTracker.get_estimated());
     Joystick.setThrottle(lTriSwitchTracker.get_estimated());
     Joystick.setRudder(rTriSwitchTracker.get_estimated());
+    Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
+    Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
 
     // Apply the moving average filter
     // long l_est = lTriSwitchTracker.get_estimated();
     // long r_est = rTriSwitchTracker.get_estimated();
     long l_est = moving_average(l_est_buffer, l_est_index, FILTER_WINDOW_SIZE, lTriSwitchTracker.get_estimated());
     long r_est = moving_average(r_est_buffer, r_est_index, FILTER_WINDOW_SIZE, rTriSwitchTracker.get_estimated());
-    
-    switch (Map.getTriSwitchMode(l_est))
-    {
-      case TriSwitchMode::UP:
-        Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
-        break;
-      case TriSwitchMode::MID:
-        Joystick.setButton(2,get_button_state(lButTracker.get_estimated()));
-        break;
-      case TriSwitchMode::DOWN:
-        Joystick.setButton(4,get_button_state(lButTracker.get_estimated()));
-        break;
-    }
+    int se_est = moving_average(se_est_buffer,se_est_index, FILTER_WINDOW_SIZE, SEButTracker.get_estimated());
 
-    switch (Map.getTriSwitchMode(r_est))
+    // Combine the two switch modes (L_TRI_SWITCH and R_TRI_SWITCH) into a single index (0-8)
+    int modeIndex = (static_cast<int>(Map.getTriSwitchMode(l_est)) * 3) + static_cast<int>(Map.getTriSwitchMode(r_est));
+
+    // Use the modeIndex to select the corresponding button state
+    switch (modeIndex)
     {
-      case TriSwitchMode::UP:
-        Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
+      case 0: // L: DOWN, R: DOWN
+        Joystick.setButton(2, get_button_state(se_est));
         break;
-      case TriSwitchMode::MID:
-        Joystick.setButton(3,get_button_state(rButTracker.get_estimated()));
+      case 1: // L: DOWN, R: MID
+        Joystick.setButton(3, get_button_state(se_est));
         break;
-      case TriSwitchMode::DOWN:
-        Joystick.setButton(5,get_button_state(rButTracker.get_estimated()));
+      case 2: // L: DOWN, R: UP
+        Joystick.setButton(4, get_button_state(se_est));
+        break;
+      case 3: // L: MID, R: DOWN
+        Joystick.setButton(5, get_button_state(se_est));
+        break;
+      case 4: // L: MID, R: MID
+        Joystick.setButton(6, get_button_state(se_est));
+        break;
+      case 5: // L: MID, R: UP
+        Joystick.setButton(7, get_button_state(se_est));
+        break;
+      case 6: // L: UP, R: DOWN
+        Joystick.setButton(8, get_button_state(se_est));
+        break;
+      case 7: // L: UP, R: MID
+        Joystick.setButton(9, get_button_state(se_est));
+        break;
+      case 8: // L: UP, R: UP
+        Joystick.setButton(10, get_button_state(se_est));
+        break;
+      default:
+        // Handle any unexpected cases, though they shouldn't occur with the above logic.
         break;
     }
 
     // Print the estimated values for debugging
-    Serial.print("L Tri Switch Mode: ");
-    Serial.print(Map.getTriSwitchMode(l_est));
-    Serial.print(", ");
-    Serial.print(l_est);
-    Serial.print(" | R Tri Switch Mode: \n");
-    Serial.print(Map.getTriSwitchMode(r_est));
-    Serial.print(", ");
-    Serial.println(r_est);
+    // Serial.print("L Tri Switch Mode: ");
+    // Serial.print(Map.getTriSwitchMode(l_est));
+    // Serial.print(", ");
+    // Serial.print(l_est);
+    // Serial.print(" | R Tri Switch Mode: ");
+    // Serial.print(Map.getTriSwitchMode(r_est));
+    // Serial.print(", ");
+    // Serial.println(r_est);
+    Serial.println(modeIndex);
+    Serial.println(se_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THREASH || 
         rButTracker.get_estimated() > MAJORITY_THREASH)
