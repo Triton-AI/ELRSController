@@ -15,8 +15,8 @@
 #define YAXIS_CHANNEL 2
 #define RX_CHANNEL 0
 #define RY_CHANNEL 1
-#define L_TRI_SWITCH 5
-#define R_TRI_SWITCH 6
+#define L_TRI_SWITCH_CHANNEL 5
+#define R_TRI_SWITCH_CHANNEL 6
 #define LBUTTON_CHANNEL 4
 #define RBUTTON_CHANNEL 7
 
@@ -122,8 +122,8 @@ void update_trackers(FUTABA_SBUS & sBus) {
   yAxisTracker.add(sBus.channels[YAXIS_CHANNEL]);
   rxTracker.add(sBus.channels[RX_CHANNEL]);
   ryTracker.add(sBus.channels[RY_CHANNEL]);
-  lTriSwitchTracker.add(sBus.channels[L_TRI_SWITCH]);
-  rTriSwitchTracker.add(sBus.channels[R_TRI_SWITCH]);
+  lTriSwitchTracker.add(sBus.channels[L_TRI_SWITCH_CHANNEL]);
+  rTriSwitchTracker.add(sBus.channels[R_TRI_SWITCH_CHANNEL]);
   lButTracker.add(sBus.channels[LBUTTON_CHANNEL]);
   rButTracker.add(sBus.channels[RBUTTON_CHANNEL]);
 }
@@ -161,27 +161,27 @@ void loop() {
     switch (Map.getTriSwitchMode(l_est))
     {
       case TriSwitchMode::UP:
-          Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
-          break;
+        Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
+        break;
       case TriSwitchMode::MID:
-          Joystick.setButton(2,get_button_state(lButTracker.get_estimated()));
-          break;
+        Joystick.setButton(2,get_button_state(lButTracker.get_estimated()));
+        break;
       case TriSwitchMode::DOWN:
-          Joystick.setButton(4,get_button_state(lButTracker.get_estimated()));
-          break;
+        Joystick.setButton(4,get_button_state(lButTracker.get_estimated()));
+        break;
     }
 
     switch (Map.getTriSwitchMode(r_est))
     {
       case TriSwitchMode::UP:
-          Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
-          break;
+        Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
+        break;
       case TriSwitchMode::MID:
-          Joystick.setButton(3,get_button_state(rButTracker.get_estimated()));
-          break;
+        Joystick.setButton(3,get_button_state(rButTracker.get_estimated()));
+        break;
       case TriSwitchMode::DOWN:
-          Joystick.setButton(5,get_button_state(rButTracker.get_estimated()));
-          break;
+        Joystick.setButton(5,get_button_state(rButTracker.get_estimated()));
+        break;
     }
 
     // Print the estimated values for debugging
