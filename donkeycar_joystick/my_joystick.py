@@ -23,8 +23,10 @@ class MyJoystick(Joystick):
 
 
         self.axis_names = {
-            0x0 : 'steering',
-            0x4 : 'acceleration',
+            0x0 : '0',
+            0x1 : '1',
+            0x3 : '3',
+            0x4 : '4',
         }
 
 
@@ -50,12 +52,19 @@ class MyJoystickController(JoystickController):
         #init set of mapping from buttons to function calls
 
         self.button_down_trigger_map = {
-            'SE_2' : self.toggle_mode,
-            'SE_3' : self.toggle_manual_recording,
+            'SA' : self.erase_last_N_records,   #left button on top
+            'SD' : self.emergency_stop,         #right button on top
+            # note that back is the position of pressing the part closer to the operator down
+            # forward is clicked the far part doww
+            # 'SE_3' : self.toggle_mode,               #left forward  right middle
+            # 'SE_4' : self.increase_max_throttle,     #left forward right back
+            # 'SE_8' : self.decrease_max_throttle,     #left back right forward
+            # 'SE_10' : self.toggle_constant_throttle, #left back right back
+            # 'SE_2' : self.toggle_manual_recording,   #left forward back forward
         }
 
 
         self.axis_trigger_map = {
-            'steering' : self.set_steering,
-            'acceleration' : self.set_throttle,
+            '3' : self.set_steering,
+            '1' : self.set_throttle,
         }
