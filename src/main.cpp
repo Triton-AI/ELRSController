@@ -48,6 +48,12 @@ enum TriSwitchMode
     UP = 2,
 };
 
+enum ButtonMode
+{
+    OFF = 0,
+    ON = 1,
+};
+
 struct Translation
 {
     double normalize(int analogValue);
@@ -155,13 +161,12 @@ void update_trackers(FUTABA_SBUS & sBus) {
   SEButTracker.add(sBus.channels[SE_BUTTON_CHANNEL]);
 }
 
-int get_button_state(int estimated) {
+ButtonMode get_button_state(int estimated) {
+  DEBUG_PRINTLN(estimated);
   if (estimated > MAJORITY_THREASH) {
-    // return ACTIVE_SIGNAL;
-    return RELEASED_SIGNAL;
+    return ON;
   } else {
-    // return RELEASED_SIGNAL;
-    return ACTIVE_SIGNAL;
+    return OFF;
   }
 }
 
@@ -180,8 +185,8 @@ void loop() {
     Joystick.setRyAxis(ryTracker.get_estimated());
     Joystick.setThrottle(lTriSwitchTracker.get_estimated());
     Joystick.setRudder(rTriSwitchTracker.get_estimated());
-    Joystick.setButton(0,get_button_state(lButTracker.get_estimated()));
-    Joystick.setButton(1,get_button_state(rButTracker.get_estimated()));
+    Joystick.setButton(0, get_button_state(lButTracker.get_estimated()));
+    Joystick.setButton(1, get_button_state(rButTracker.get_estimated()));
 
     // Apply the moving average filter
     // long l_est = lTriSwitchTracker.get_estimated();
@@ -237,8 +242,8 @@ void loop() {
     // DEBUG_PRINT(Map.getTriSwitchMode(r_est));
     // DEBUG_PRINT(", ");
     // DEBUG_PRINTLN(r_est);
-    DEBUG_PRINTLN(modeIndex);
-    DEBUG_PRINTLN(se_est);
+    // DEBUG_PRINTLN(modeIndex);
+    // DEBUG_PRINTLN(se_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THREASH || 
         rButTracker.get_estimated() > MAJORITY_THREASH)
