@@ -402,6 +402,7 @@ void loop() {
 
     // Only update if modeIndex has changed
     if (modeIndex != lastModeIndex) {
+      Joystick.setButton(lastModeIndex + 2, OFF);
       lastModeIndex = modeIndex;
 #if defined(DEBUG_LOG)
       DEBUG_PRINT("Mode Index: "); DEBUG_PRINTLN(modeIndex);
