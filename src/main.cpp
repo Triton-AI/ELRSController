@@ -32,7 +32,7 @@
 #define MAJORITY_THRESH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
 
 #define EMA_ALPHA 0.12f // tuned: slightly more smoothing for stability
-#define DEBOUNCE_COUNT 4 // tuned: require 4 consecutive confirmations to change mode
+#define DEBOUNCE_COUNT 3 // tuned: require 3 consecutive confirmations to change mode
 
 #define XAXIS_CHANNEL 3
 #define YAXIS_CHANNEL 2
@@ -106,9 +106,9 @@ TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawVa
   double n = translator.normalize((int)rawValue);
   // thresholds tuned relative to Translation::getTriSwitchMode thresholds
   const double up_enter = 0.45;
-  const double up_exit = 0.40; // tuned: require a clearer drop to exit UP
+  const double up_exit = 0.15; // tuned: require a clearer drop to exit UP
   const double down_enter = -0.55;
-  const double down_exit = -0.45;
+  const double down_exit = -0.15;
 
   if (lastMode == UP) {
     // pick correct exit counter for this switch
