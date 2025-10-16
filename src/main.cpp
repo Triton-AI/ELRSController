@@ -8,7 +8,7 @@
 #define MAX_SIGNAL 1790
 
 #define ACTIVE_SIGNAL 1792
-#define REALESED_SIGNAL 192
+#define RELEASED_SIGNAL 192
 #define MAJORITY_THREASH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
 
 #define XAXIS_CHANNEL 3
@@ -136,9 +136,9 @@ void update_trackers(FUTABA_SBUS & sBus) {
 int get_button_state(int estimated) {
   if (estimated > MAJORITY_THREASH) {
     // return ACTIVE_SIGNAL;
-    return REALESED_SIGNAL;
+    return RELEASED_SIGNAL;
   } else {
-    // return REALESED_SIGNAL;
+    // return RELEASED_SIGNAL;
     return ACTIVE_SIGNAL;
   }
 }
