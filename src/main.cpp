@@ -425,12 +425,6 @@ void loop() {
         // Handle any unexpected cases, though they shouldn't occur with the above logic.
         break;
     }
-
-    // Print the estimated values for debugging
-    // DEBUG_PRINT("Mode Index: ");
-    // DEBUG_PRINTLN(modeIndex);
-    // DEBUG_PRINT("SE Button State: ");
-    // DEBUG_PRINTLN(se_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THRESH || 
         rButTracker.get_estimated() > MAJORITY_THRESH)
