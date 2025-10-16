@@ -31,6 +31,8 @@
 #define RELEASED_SIGNAL 192
 #define MAJORITY_THRESH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
 
+#define EMA_ALPHA 0.15f // tweak this value for smoothing/response
+
 #define XAXIS_CHANNEL 3
 #define YAXIS_CHANNEL 2
 #define RX_CHANNEL 0
@@ -82,31 +84,82 @@ TriSwitchMode Translation::getTriSwitchMode(int TriVal)
         return MID;
 }
 
-#define FILTER_WINDOW_SIZE 10
+// Hysteresis for tri-switch mode to prevent flapping near thresholds
+static TriSwitchMode lastLMode = MID;
+static TriSwitchMode lastRMode = MID;
 
-// Buffers for the moving average filter (separate buffers for left and right)
-long l_est_buffer[FILTER_WINDOW_SIZE] = {0};
-long r_est_buffer[FILTER_WINDOW_SIZE] = {0};
-long se_est_buffer[FILTER_WINDOW_SIZE] = {0};
+TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode) {
+  double n = translator.normalize((int)rawValue);
+  // thresholds tuned relative to Translation::getTriSwitchMode thresholds
+  const double up_enter = 0.45;
+  const double up_exit = 0.35;
+  const double down_enter = -0.55;
+  const double down_exit = -0.45;
 
-int l_est_index = 0;  // Track current index for left filter
-int r_est_index = 0;  // Track current index for right filter
-int se_est_index = 0;
-
-long moving_average(long* buffer, int& buffer_index, int buffer_size, long new_value) {
-  long sum = 0;
-
-  // Subtract the old value and add the new value
-  buffer[buffer_index] = new_value;
-  buffer_index = (buffer_index + 1) % buffer_size;
-
-  // Sum up all values in the buffer
-  for (int i = 0; i < buffer_size; i++) {
-    sum += buffer[i];
+  if (lastMode == UP) {
+    if (n < up_exit) {
+      lastMode = MID;
+    }
+    return lastMode;
+  }
+  if (lastMode == DOWN) {
+    if (n > down_exit) {
+      lastMode = MID;
+    }
+    return lastMode;
   }
 
-  // Return the average
-  return sum / buffer_size;
+  // lastMode == MID
+  if (n > up_enter) {
+    lastMode = UP;
+  } else if (n < down_enter) {
+    lastMode = DOWN;
+  } else {
+    lastMode = MID;
+  }
+  return lastMode;
+}
+
+// Helper to convert mode to human-readable string for debug logging
+static const char* triModeToString(TriSwitchMode m) {
+  switch (m) {
+    case DOWN: return "DOWN";
+    case MID: return "MID";
+    case UP: return "UP";
+    default: return "UNKNOWN";
+  }
+}
+
+// Variant with debug logging (prints when the mode changes). Name is used to indicate L/R switch.
+TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode, const char* name) {
+  TriSwitchMode newMode = getTriSwitchModeWithHysteresis(translator, rawValue, lastMode);
+  if (newMode != lastMode) {
+    DEBUG_PRINT(name);
+    DEBUG_PRINT(" -> ");
+    DEBUG_PRINT(triModeToString(lastMode));
+    DEBUG_PRINT(" -> ");
+    DEBUG_PRINTLN(triModeToString(newMode));
+  }
+  return newMode;
+}
+
+// Exponential Moving Average (IIR) helper
+// alpha: smoothing factor in (0,1). Smaller alpha = more smoothing.
+static float l_est_ema = 0.0f;
+static float r_est_ema = 0.0f;
+static float se_est_ema = 0.0f;
+static bool l_est_ema_init = false;
+static bool r_est_ema_init = false;
+static bool se_est_ema_init = false;
+
+static long ema_update(float &state, bool &inited, const float alpha, long sample) {
+  if (!inited) {
+    state = (float)sample;
+    inited = true;
+  } else {
+    state = alpha * (float)sample + (1.0f - alpha) * state;
+  }
+  return (long)(state + 0.5f);
 }
 
 Translation Map;
@@ -162,7 +215,6 @@ void update_trackers(FUTABA_SBUS & sBus) {
 }
 
 ButtonMode get_button_state(int estimated) {
-  DEBUG_PRINTLN(estimated);
   if (estimated > MAJORITY_THRESH) {
     return ON;
   } else {
@@ -188,15 +240,15 @@ void loop() {
     Joystick.setButton(0, get_button_state(lButTracker.get_estimated()));
     Joystick.setButton(1, get_button_state(rButTracker.get_estimated()));
 
-    // Apply the moving average filter
-    // long l_est = lTriSwitchTracker.get_estimated();
-    // long r_est = rTriSwitchTracker.get_estimated();
-    long l_est = moving_average(l_est_buffer, l_est_index, FILTER_WINDOW_SIZE, lTriSwitchTracker.get_estimated());
-    long r_est = moving_average(r_est_buffer, r_est_index, FILTER_WINDOW_SIZE, rTriSwitchTracker.get_estimated());
-    int se_est = moving_average(se_est_buffer, se_est_index, FILTER_WINDOW_SIZE, SEButTracker.get_estimated());
+    // Apply the exponential moving average filter
+    long l_est = ema_update(l_est_ema, l_est_ema_init, EMA_ALPHA, lTriSwitchTracker.get_estimated());
+    long r_est = ema_update(r_est_ema, r_est_ema_init, EMA_ALPHA, rTriSwitchTracker.get_estimated());
+    int se_est = static_cast<int>(ema_update(se_est_ema, se_est_ema_init, EMA_ALPHA, SEButTracker.get_estimated()));
 
     // Combine the two switch modes (L_TRI_SWITCH and R_TRI_SWITCH) into a single index (0-8)
-    int modeIndex = (static_cast<int>(Map.getTriSwitchMode(l_est)) * 3) + static_cast<int>(Map.getTriSwitchMode(r_est));
+    TriSwitchMode lMode = getTriSwitchModeWithHysteresis(Map, l_est, lastLMode, "L");
+    TriSwitchMode rMode = getTriSwitchModeWithHysteresis(Map, r_est, lastRMode, "R");
+    int modeIndex = (static_cast<int>(lMode) * 3) + static_cast<int>(rMode);
 
     // Use the modeIndex to select the corresponding button state
     switch (modeIndex)
@@ -234,16 +286,10 @@ void loop() {
     }
 
     // Print the estimated values for debugging
-    // DEBUG_PRINT("L Tri Switch Mode: ");
-    // DEBUG_PRINT(Map.getTriSwitchMode(l_est));
-    // DEBUG_PRINT(", ");
-    // DEBUG_PRINT(l_est);
-    // DEBUG_PRINT(" | R Tri Switch Mode: ");
-    // DEBUG_PRINT(Map.getTriSwitchMode(r_est));
-    // DEBUG_PRINT(", ");
-    // DEBUG_PRINTLN(r_est);
-    // DEBUG_PRINTLN(modeIndex);
-    // DEBUG_PRINTLN(se_est);
+    DEBUG_PRINT("Mode Index: ");
+    DEBUG_PRINTLN(modeIndex);
+    DEBUG_PRINT("SE Button State: ");
+    DEBUG_PRINTLN(se_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THRESH || 
         rButTracker.get_estimated() > MAJORITY_THRESH)
