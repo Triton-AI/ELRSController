@@ -102,7 +102,7 @@ static int r_raw_idx = 0;
 static int l_exit_counter = 0;
 static int r_exit_counter = 0;
 
-TriSwitchMode getTriSwitchModeWithHysteresisLogic(Translation &translator, long rawValue, TriSwitchMode &lastMode) {
+TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode) {
   double n = translator.normalize((int)rawValue);
   // thresholds tuned relative to Translation::getTriSwitchMode thresholds
   const double up_enter = 0.45;
