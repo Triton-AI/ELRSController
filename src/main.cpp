@@ -61,7 +61,7 @@ TriSwitchMode Translation::getTriSwitchMode(int TriVal)
 // Buffers for the moving average filter (separate buffers for left and right)
 long l_est_buffer[FILTER_WINDOW_SIZE] = {0};
 long r_est_buffer[FILTER_WINDOW_SIZE] = {0};
-long se_est_buffer[30] = {0};
+long se_est_buffer[FILTER_WINDOW_SIZE] = {0};
 
 int l_est_index = 0;  // Track current index for left filter
 int r_est_index = 0;  // Track current index for right filter
@@ -166,7 +166,7 @@ void loop() {
     // long r_est = rTriSwitchTracker.get_estimated();
     long l_est = moving_average(l_est_buffer, l_est_index, FILTER_WINDOW_SIZE, lTriSwitchTracker.get_estimated());
     long r_est = moving_average(r_est_buffer, r_est_index, FILTER_WINDOW_SIZE, rTriSwitchTracker.get_estimated());
-    int se_est = moving_average(se_est_buffer,se_est_index, FILTER_WINDOW_SIZE, SEButTracker.get_estimated());
+    int se_est = moving_average(se_est_buffer, se_est_index, FILTER_WINDOW_SIZE, SEButTracker.get_estimated());
 
     // Combine the two switch modes (L_TRI_SWITCH and R_TRI_SWITCH) into a single index (0-8)
     int modeIndex = (static_cast<int>(Map.getTriSwitchMode(l_est)) * 3) + static_cast<int>(Map.getTriSwitchMode(r_est));
