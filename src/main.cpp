@@ -29,7 +29,7 @@
 
 #define ACTIVE_SIGNAL 1792
 #define RELEASED_SIGNAL 192
-#define MAJORITY_THREASH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
+#define MAJORITY_THRESH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
 
 #define XAXIS_CHANNEL 3
 #define YAXIS_CHANNEL 2
@@ -163,7 +163,7 @@ void update_trackers(FUTABA_SBUS & sBus) {
 
 ButtonMode get_button_state(int estimated) {
   DEBUG_PRINTLN(estimated);
-  if (estimated > MAJORITY_THREASH) {
+  if (estimated > MAJORITY_THRESH) {
     return ON;
   } else {
     return OFF;
@@ -245,8 +245,8 @@ void loop() {
     // DEBUG_PRINTLN(modeIndex);
     // DEBUG_PRINTLN(se_est);
     
-    if (lButTracker.get_estimated() > MAJORITY_THREASH || 
-        rButTracker.get_estimated() > MAJORITY_THREASH)
+    if (lButTracker.get_estimated() > MAJORITY_THRESH || 
+        rButTracker.get_estimated() > MAJORITY_THRESH)
     {
       digitalWrite(8, HIGH);
     }
