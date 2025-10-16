@@ -31,7 +31,8 @@
 #define RELEASED_SIGNAL 192
 #define MAJORITY_THRESH ( (HISTORY_SIZE / 2 + 1) * ACTIVE_SIGNAL) / HISTORY_SIZE
 
-#define EMA_ALPHA 0.15f // tweak this value for smoothing/response
+#define EMA_ALPHA 0.12f // tuned: slightly more smoothing for stability
+#define DEBOUNCE_COUNT 4 // tuned: require 4 consecutive confirmations to change mode
 
 #define XAXIS_CHANNEL 3
 #define YAXIS_CHANNEL 2
@@ -87,36 +88,102 @@ TriSwitchMode Translation::getTriSwitchMode(int TriVal)
 // Hysteresis for tri-switch mode to prevent flapping near thresholds
 static TriSwitchMode lastLMode = MID;
 static TriSwitchMode lastRMode = MID;
+// Debounce counters for confirming a new mode before committing
+static int l_mode_counter = 0;
+static int r_mode_counter = 0;
+
+// Median-of-3 buffers for L and R raw samples
+static long l_raw_buf[3] = {0};
+static long r_raw_buf[3] = {0};
+static int l_raw_idx = 0;
+static int r_raw_idx = 0;
+
+// Exit confirmation counters: require several consecutive exit samples to leave UP/DOWN
+static int l_exit_counter = 0;
+static int r_exit_counter = 0;
 
 TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode) {
   double n = translator.normalize((int)rawValue);
   // thresholds tuned relative to Translation::getTriSwitchMode thresholds
   const double up_enter = 0.45;
-  const double up_exit = 0.35;
+  const double up_exit = 0.40; // tuned: require a clearer drop to exit UP
   const double down_enter = -0.55;
   const double down_exit = -0.45;
 
   if (lastMode == UP) {
+    // pick correct exit counter for this switch
+    int *exit_counter = nullptr;
+    if (&lastMode == &lastLMode) exit_counter = &l_exit_counter;
+    else if (&lastMode == &lastRMode) exit_counter = &r_exit_counter;
+
     if (n < up_exit) {
-      lastMode = MID;
+      // require consecutive exit confirmations
+      if (exit_counter) {
+        if (++(*exit_counter) >= DEBOUNCE_COUNT) {
+          lastMode = MID;
+          *exit_counter = 0;
+        }
+      } else {
+        // fallback: immediate
+        lastMode = MID;
+      }
+    } else {
+      if (exit_counter) *exit_counter = 0;
     }
     return lastMode;
   }
   if (lastMode == DOWN) {
+    // pick correct exit counter for this switch
+    int *exit_counter = nullptr;
+    if (&lastMode == &lastLMode) exit_counter = &l_exit_counter;
+    else if (&lastMode == &lastRMode) exit_counter = &r_exit_counter;
+
     if (n > down_exit) {
-      lastMode = MID;
+      if (exit_counter) {
+        if (++(*exit_counter) >= DEBOUNCE_COUNT) {
+          lastMode = MID;
+          *exit_counter = 0;
+        }
+      } else {
+        lastMode = MID;
+      }
+    } else {
+      if (exit_counter) *exit_counter = 0;
     }
     return lastMode;
   }
 
   // lastMode == MID
+  // Candidate mode based on thresholds
+  TriSwitchMode candidate;
   if (n > up_enter) {
-    lastMode = UP;
+    candidate = UP;
   } else if (n < down_enter) {
-    lastMode = DOWN;
+    candidate = DOWN;
   } else {
-    lastMode = MID;
+    candidate = MID;
   }
+
+  // Debounce: require DEBOUNCE_COUNT consecutive candidate readings before committing
+  int *counter = nullptr;
+  if (&lastMode == &lastLMode) counter = &l_mode_counter;
+  else if (&lastMode == &lastRMode) counter = &r_mode_counter;
+
+  if (counter) {
+    if (candidate == lastMode) {
+      *counter = 0; // already in this mode
+    } else {
+      (*counter)++;
+      if (*counter >= DEBOUNCE_COUNT) {
+        lastMode = candidate;
+        *counter = 0;
+      }
+    }
+  } else {
+    // Fallback: commit immediately
+    lastMode = candidate;
+  }
+
   return lastMode;
 }
 
@@ -131,14 +198,25 @@ static const char* triModeToString(TriSwitchMode m) {
 }
 
 // Variant with debug logging (prints when the mode changes). Name is used to indicate L/R switch.
+// Helper to compute normalized value for logging
+static double normalize_for_log(Translation &translator, long rawValue) {
+  return translator.normalize((int)rawValue);
+}
+
 TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode, const char* name) {
+  TriSwitchMode oldMode = lastMode;
   TriSwitchMode newMode = getTriSwitchModeWithHysteresis(translator, rawValue, lastMode);
-  if (newMode != lastMode) {
+  if (newMode != oldMode) {
+    double n = normalize_for_log(translator, rawValue);
     DEBUG_PRINT(name);
+    DEBUG_PRINT(" change: ");
+    DEBUG_PRINT(triModeToString(oldMode));
     DEBUG_PRINT(" -> ");
-    DEBUG_PRINT(triModeToString(lastMode));
-    DEBUG_PRINT(" -> ");
-    DEBUG_PRINTLN(triModeToString(newMode));
+    DEBUG_PRINT(triModeToString(newMode));
+    DEBUG_PRINT(" | raw=");
+    DEBUG_PRINT(rawValue);
+    DEBUG_PRINT(" norm=");
+    DEBUG_PRINTLN(n);
   }
   return newMode;
 }
@@ -245,9 +323,24 @@ void loop() {
     long r_est = ema_update(r_est_ema, r_est_ema_init, EMA_ALPHA, rTriSwitchTracker.get_estimated());
     int se_est = static_cast<int>(ema_update(se_est_ema, se_est_ema_init, EMA_ALPHA, SEButTracker.get_estimated()));
 
+    // Median-of-3 prefilter for L and R raw estimates
+    l_raw_buf[l_raw_idx] = l_est;
+    l_raw_idx = (l_raw_idx + 1) % 3;
+    long l_med_vals[3] = { l_raw_buf[0], l_raw_buf[1], l_raw_buf[2] };
+    // sort 3 values to get median
+    for (int i = 0; i < 2; ++i) for (int j = i+1; j < 3; ++j) if (l_med_vals[i] > l_med_vals[j]) { long t = l_med_vals[i]; l_med_vals[i] = l_med_vals[j]; l_med_vals[j] = t; }
+    long l_med = l_med_vals[1];
+
+    r_raw_buf[r_raw_idx] = r_est;
+    r_raw_idx = (r_raw_idx + 1) % 3;
+    long r_med_vals[3] = { r_raw_buf[0], r_raw_buf[1], r_raw_buf[2] };
+    for (int i = 0; i < 2; ++i) for (int j = i+1; j < 3; ++j) if (r_med_vals[i] > r_med_vals[j]) { long t = r_med_vals[i]; r_med_vals[i] = r_med_vals[j]; r_med_vals[j] = t; }
+    long r_med = r_med_vals[1];
+
     // Combine the two switch modes (L_TRI_SWITCH and R_TRI_SWITCH) into a single index (0-8)
-    TriSwitchMode lMode = getTriSwitchModeWithHysteresis(Map, l_est, lastLMode, "L");
-    TriSwitchMode rMode = getTriSwitchModeWithHysteresis(Map, r_est, lastRMode, "R");
+    TriSwitchMode lMode = getTriSwitchModeWithHysteresis(Map, l_med, lastLMode, "L");
+    TriSwitchMode rMode = getTriSwitchModeWithHysteresis(Map, r_med, lastRMode, "R");
+
     int modeIndex = (static_cast<int>(lMode) * 3) + static_cast<int>(rMode);
 
     // Use the modeIndex to select the corresponding button state
@@ -286,10 +379,10 @@ void loop() {
     }
 
     // Print the estimated values for debugging
-    DEBUG_PRINT("Mode Index: ");
-    DEBUG_PRINTLN(modeIndex);
-    DEBUG_PRINT("SE Button State: ");
-    DEBUG_PRINTLN(se_est);
+    // DEBUG_PRINT("Mode Index: ");
+    // DEBUG_PRINTLN(modeIndex);
+    // DEBUG_PRINT("SE Button State: ");
+    // DEBUG_PRINTLN(se_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THRESH || 
         rButTracker.get_estimated() > MAJORITY_THRESH)
