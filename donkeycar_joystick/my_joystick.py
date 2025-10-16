@@ -55,7 +55,7 @@ class MyJoystickController(JoystickController):
             'SA' : self.erase_last_N_records,   #left button on top
             'SD' : self.emergency_stop,         #right button on top
             # note that back is the position of pressing the part closer to the operator down
-            # forward is clicked the far part doww
+            # forward is clicked the far part down
             # 'SE_3' : self.toggle_mode,               #left forward  right middle
             # 'SE_4' : self.increase_max_throttle,     #left forward right back
             # 'SE_8' : self.decrease_max_throttle,     #left back right forward
