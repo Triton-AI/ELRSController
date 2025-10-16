@@ -4,6 +4,26 @@
 #include "utils/SBusTracker.h"
 // #include <Streaming.h>
 
+
+// Compile-time debug logging.
+// To enable debug serial output, define the `DEBUG_LOG` macro in your build flags.
+// For PlatformIO add this to your environment in `platformio.ini`:
+//
+// [env:your_env]
+// build_flags = -DDEBUG_LOG
+//
+// Note: On some boards the Serial interface may conflict with USB HID functionality
+// (e.g., when emulating a joystick). Only enable serial debug while testing.
+#if defined(DEBUG_LOG)
+#define DEBUG_BEGIN(baud) Serial.begin(baud)
+#define DEBUG_PRINT(val) Serial.print(val)
+#define DEBUG_PRINTLN(val) Serial.println(val)
+#else
+#define DEBUG_BEGIN(baud) do {} while (0)
+#define DEBUG_PRINT(val) do {} while (0)
+#define DEBUG_PRINTLN(val) do {} while (0)
+#endif
+
 #define MIN_SIGNAL 190
 #define MAX_SIGNAL 1790
 
@@ -108,6 +128,8 @@ void setup() {
 
   //Set pinout
   pinMode(8, OUTPUT);
+  // Initialize Serial only when debug logging is enabled
+  DEBUG_BEGIN(115200);
   // Configure JoyStick
   Joystick.setXAxisRange(MIN_SIGNAL, MAX_SIGNAL);
   Joystick.setYAxisRange(MIN_SIGNAL, MAX_SIGNAL);
@@ -207,16 +229,16 @@ void loop() {
     }
 
     // Print the estimated values for debugging
-    // Serial.print("L Tri Switch Mode: ");
-    // Serial.print(Map.getTriSwitchMode(l_est));
-    // Serial.print(", ");
-    // Serial.print(l_est);
-    // Serial.print(" | R Tri Switch Mode: ");
-    // Serial.print(Map.getTriSwitchMode(r_est));
-    // Serial.print(", ");
-    // Serial.println(r_est);
-    Serial.println(modeIndex);
-    Serial.println(se_est);
+    // DEBUG_PRINT("L Tri Switch Mode: ");
+    // DEBUG_PRINT(Map.getTriSwitchMode(l_est));
+    // DEBUG_PRINT(", ");
+    // DEBUG_PRINT(l_est);
+    // DEBUG_PRINT(" | R Tri Switch Mode: ");
+    // DEBUG_PRINT(Map.getTriSwitchMode(r_est));
+    // DEBUG_PRINT(", ");
+    // DEBUG_PRINTLN(r_est);
+    DEBUG_PRINTLN(modeIndex);
+    DEBUG_PRINTLN(se_est);
     
     if (lButTracker.get_estimated() > MAJORITY_THREASH || 
         rButTracker.get_estimated() > MAJORITY_THREASH)
