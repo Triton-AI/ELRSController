@@ -345,7 +345,8 @@ void update_trackers(FUTABA_SBUS & sBus) {
   SEButTracker.add(sBus.channels[SE_BUTTON_CHANNEL]);
 }
 
-
+static int modeIndex = -1;
+static int lastModeIndex = -1;
 void loop() {
   sBus.FeedLine();
   if (sBus.toChannels == 1){
@@ -389,41 +390,23 @@ void loop() {
     TriSwitchMode lMode = getTriSwitchModeWithHysteresis(Map, l_med, lastLMode, "L");
     TriSwitchMode rMode = getTriSwitchModeWithHysteresis(Map, r_med, lastRMode, "R");
 
-    int modeIndex = (static_cast<int>(lMode) * 3) + static_cast<int>(rMode);
+    modeIndex = (static_cast<int>(lMode) * 3) + static_cast<int>(rMode);
 
-    // Use the modeIndex to select the corresponding button state
-    switch (modeIndex)
-    {
-      case 0: // L: DOWN, R: DOWN
-        Joystick.setButton(2, Map.get_button_state(se_est));
-        break;
-      case 1: // L: DOWN, R: MID
-        Joystick.setButton(3, Map.get_button_state(se_est));
-        break;
-      case 2: // L: DOWN, R: UP
-        Joystick.setButton(4, Map.get_button_state(se_est));
-        break;
-      case 3: // L: MID, R: DOWN
-        Joystick.setButton(5, Map.get_button_state(se_est));
-        break;
-      case 4: // L: MID, R: MID
-        Joystick.setButton(6, Map.get_button_state(se_est));
-        break;
-      case 5: // L: MID, R: UP
-        Joystick.setButton(7, Map.get_button_state(se_est));
-        break;
-      case 6: // L: UP, R: DOWN
-        Joystick.setButton(8, Map.get_button_state(se_est));
-        break;
-      case 7: // L: UP, R: MID
-        Joystick.setButton(9, Map.get_button_state(se_est));
-        break;
-      case 8: // L: UP, R: UP
-        Joystick.setButton(10, Map.get_button_state(se_est));
-        break;
-      default:
-        // Handle any unexpected cases, though they shouldn't occur with the above logic.
-        break;
+    // Use the modeIndex (0-8) to select the corresponding button state (2-10)
+    // L: DOWN, MID, UP = 0, 1, 2
+    // R: DOWN, MID, UP = 0, 1, 2
+    // modeIndex = L * 3 + R
+    if (modeIndex >= 0 && modeIndex <= 8) {
+      Joystick.setButton(modeIndex + 2, Map.get_button_state(se_est));
+    }
+
+    // Only update if modeIndex has changed
+    if (modeIndex != lastModeIndex) {
+      lastModeIndex = modeIndex;
+#if defined(DEBUG_LOG)
+      DEBUG_PRINT("Mode Index: "); DEBUG_PRINTLN(modeIndex);
+      DEBUG_PRINT("SE Button State: "); DEBUG_PRINTLN(se_est);
+#endif
     }
     
     if (lButTracker.get_estimated() > MAJORITY_THRESH || 
