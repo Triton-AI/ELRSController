@@ -61,6 +61,7 @@ struct Translation
 {
     double normalize(int analogValue);
     TriSwitchMode getTriSwitchMode(int TriVal);
+    ButtonMode get_button_state(int estimated);
 };
 
 // TRANSLATION
@@ -84,6 +85,13 @@ TriSwitchMode Translation::getTriSwitchMode(int TriVal)
     else
         return MID;
 }
+ButtonMode Translation::get_button_state(int estimated) {
+    if (estimated > MAJORITY_THRESH) {
+      return ON;
+    } else {
+      return OFF;
+    }
+}
 
 // Hysteresis for tri-switch mode to prevent flapping near thresholds
 static TriSwitchMode lastLMode = MID;
@@ -102,13 +110,58 @@ static int r_raw_idx = 0;
 static int l_exit_counter = 0;
 static int r_exit_counter = 0;
 
+// Button hysteresis/debounce state (use normalized values like tri-switches)
+static ButtonMode l_button_state = OFF;
+static ButtonMode r_button_state = OFF;
+static int l_button_mode_counter = 0;
+static int r_button_mode_counter = 0;
+static int l_button_exit_counter = 0;
+static int r_button_exit_counter = 0;
+
+// Button thresholds (normalized), same pattern as tri-switch
+const static double button_enter = 0.20;
+const static double button_exit = -0.20;
+
+// Update a binary button using normalized input with enter/exit hysteresis and DEBOUNCE_COUNT
+static ButtonMode update_button_hysteresis(Translation &translator, int estimated,
+                                           ButtonMode &state, int &mode_counter, int &exit_counter,
+                                           const char *name) {
+  double n = translator.normalize(estimated);
+  ButtonMode old = state;
+  if (state == ON) {
+    if (n < button_exit) {
+      if (++exit_counter >= DEBOUNCE_COUNT) {
+        state = OFF;
+        exit_counter = 0;
+      }
+    } else {
+      exit_counter = 0;
+    }
+  } else { // OFF
+    if (n > button_enter) {
+      if (++mode_counter >= DEBOUNCE_COUNT) {
+        state = ON;
+        mode_counter = 0;
+      }
+    } else {
+      mode_counter = 0;
+    }
+  }
+  if (state != old) {
+#if defined(DEBUG_LOG)
+    DEBUG_PRINT(name); DEBUG_PRINT(" button: "); DEBUG_PRINT(old == OFF ? "OFF" : "ON"); DEBUG_PRINT(" -> "); DEBUG_PRINTLN(state == OFF ? "OFF" : "ON");
+#endif
+  }
+  return state;
+}
+
 TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode) {
-  double n = translator.normalize((int)rawValue);
+  double n = translator.normalize(static_cast<int>(rawValue));
   // thresholds tuned relative to Translation::getTriSwitchMode thresholds
-  const double up_enter = 0.45;
-  const double up_exit = 0.15; // tuned: require a clearer drop to exit UP
-  const double down_enter = -0.55;
-  const double down_exit = -0.15;
+  const static double up_enter = 0.45;
+  const static double up_exit = 0.15; // tuned: require a clearer drop to exit UP
+  const static double down_enter = -0.55;
+  const static double down_exit = -0.15;
 
   if (lastMode == UP) {
     // pick correct exit counter for this switch
@@ -200,7 +253,7 @@ static const char* triModeToString(TriSwitchMode m) {
 // Variant with debug logging (prints when the mode changes). Name is used to indicate L/R switch.
 // Helper to compute normalized value for logging
 static double normalize_for_log(Translation &translator, long rawValue) {
-  return translator.normalize((int)rawValue);
+  return translator.normalize(static_cast<int>(rawValue));
 }
 
 TriSwitchMode getTriSwitchModeWithHysteresis(Translation &translator, long rawValue, TriSwitchMode &lastMode, const char* name) {
@@ -292,14 +345,6 @@ void update_trackers(FUTABA_SBUS & sBus) {
   SEButTracker.add(sBus.channels[SE_BUTTON_CHANNEL]);
 }
 
-ButtonMode get_button_state(int estimated) {
-  if (estimated > MAJORITY_THRESH) {
-    return ON;
-  } else {
-    return OFF;
-  }
-}
-
 
 void loop() {
   sBus.FeedLine();
@@ -315,8 +360,11 @@ void loop() {
     Joystick.setRyAxis(ryTracker.get_estimated());
     Joystick.setThrottle(lTriSwitchTracker.get_estimated());
     Joystick.setRudder(rTriSwitchTracker.get_estimated());
-    Joystick.setButton(0, get_button_state(lButTracker.get_estimated()));
-    Joystick.setButton(1, get_button_state(rButTracker.get_estimated()));
+    // Use normalized enter/exit hysteresis + debounce for buttons (same mech as tri-switch)
+    update_button_hysteresis(Map, lButTracker.get_estimated(), l_button_state, l_button_mode_counter, l_button_exit_counter, "LBtn");
+    update_button_hysteresis(Map, rButTracker.get_estimated(), r_button_state, r_button_mode_counter, r_button_exit_counter, "RBtn");
+    Joystick.setButton(0, l_button_state);
+    Joystick.setButton(1, r_button_state);
 
     // Apply the exponential moving average filter
     long l_est = ema_update(l_est_ema, l_est_ema_init, EMA_ALPHA, lTriSwitchTracker.get_estimated());
@@ -347,31 +395,31 @@ void loop() {
     switch (modeIndex)
     {
       case 0: // L: DOWN, R: DOWN
-        Joystick.setButton(2, get_button_state(se_est));
+        Joystick.setButton(2, Map.get_button_state(se_est));
         break;
       case 1: // L: DOWN, R: MID
-        Joystick.setButton(3, get_button_state(se_est));
+        Joystick.setButton(3, Map.get_button_state(se_est));
         break;
       case 2: // L: DOWN, R: UP
-        Joystick.setButton(4, get_button_state(se_est));
+        Joystick.setButton(4, Map.get_button_state(se_est));
         break;
       case 3: // L: MID, R: DOWN
-        Joystick.setButton(5, get_button_state(se_est));
+        Joystick.setButton(5, Map.get_button_state(se_est));
         break;
       case 4: // L: MID, R: MID
-        Joystick.setButton(6, get_button_state(se_est));
+        Joystick.setButton(6, Map.get_button_state(se_est));
         break;
       case 5: // L: MID, R: UP
-        Joystick.setButton(7, get_button_state(se_est));
+        Joystick.setButton(7, Map.get_button_state(se_est));
         break;
       case 6: // L: UP, R: DOWN
-        Joystick.setButton(8, get_button_state(se_est));
+        Joystick.setButton(8, Map.get_button_state(se_est));
         break;
       case 7: // L: UP, R: MID
-        Joystick.setButton(9, get_button_state(se_est));
+        Joystick.setButton(9, Map.get_button_state(se_est));
         break;
       case 8: // L: UP, R: UP
-        Joystick.setButton(10, get_button_state(se_est));
+        Joystick.setButton(10, Map.get_button_state(se_est));
         break;
       default:
         // Handle any unexpected cases, though they shouldn't occur with the above logic.
