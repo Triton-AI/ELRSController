@@ -8,8 +8,8 @@ class MyJoystick(Joystick):
 
 
         self.button_names = {
-            0x100 : 'SA',
-            0x101 : 'SD',
+            # 0x100 : 'SA',
+            # 0x101 : 'SD',
             0x102 : 'SE_2',
             0x103 : 'SE_3',
             0x104 : 'SE_4',
@@ -23,10 +23,10 @@ class MyJoystick(Joystick):
 
 
         self.axis_names = {
-            0x0 : '0',
-            0x1 : '1',
-            0x3 : '3',
-            0x4 : '4',
+            0x0 : 'Rudder',
+            0x1 : 'Throttle',
+            0x3 : 'Aileron',
+            0x4 : 'Elevator',
         }
 
 
@@ -52,19 +52,22 @@ class MyJoystickController(JoystickController):
         #init set of mapping from buttons to function calls
 
         self.button_down_trigger_map = {
-            'SA' : self.erase_last_N_records,   #left button on top
-            'SD' : self.emergency_stop,         #right button on top
             # note that back is the position of pressing the part closer to the operator down
             # forward is clicked the far part down
-            # 'SE_3' : self.toggle_mode,               #left forward  right middle
-            # 'SE_4' : self.increase_max_throttle,     #left forward right back
-            # 'SE_8' : self.decrease_max_throttle,     #left back right forward
-            # 'SE_10' : self.toggle_constant_throttle, #left back right back
-            # 'SE_2' : self.toggle_manual_recording,   #left forward back forward
+            'SE_2' : self.toggle_mode,
+            'SE_3' : self.erase_last_N_records,
+            'SE_4' : self.toggle_manual_recording,
+            # 'SE_5' : self.decrease_max_throttle,
+            'SE_6' : self.toggle_constant_throttle,
+            # 'SE_7' : self.increase_max_throttle,
+            'SE_8' : self.emergency_stop,
         }
 
 
         self.axis_trigger_map = {
-            '3' : self.set_steering,
-            '1' : self.set_throttle,
+            'Rudder' : self.set_steering,
+            'Elevator' : self.set_inverted_throttle,
         }
+
+    def set_inverted_throttle(self, axis_val):
+        self.set_throttle(-axis_val)
